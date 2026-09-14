@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>拾页 · Pagefold</title><link rel="stylesheet" href="style.css"></head>
+<body>
+ <aside class="sidebar">
+  <a class="brand" href="index.html"><span class="brand-icon">◩</span><span>拾页<small>PAGEFOLD</small></span></a>
+  <div class="nav-label">我的浏览器</div>
+  <nav aria-label="主导航">
+   <button data-view="overview"><span>◈</span>统计总览</button>
+   <button data-view="analysis"><span>✳</span>AI 分析</button>
+   <button data-view="projects"><span>◇</span>常用项目</button>
+   <button data-view="spaces" class="active"><span>▦</span>工作空间 <i id="space-count"></i></button>
+
+   <button data-view="windows"><span>▣</span>当前窗口</button>
+   <button data-view="duplicates"><span>⧉</span>重复候选 <i id="dup-count"></i></button>
+  </nav>
+  <div class="nav-label second">整理工具</div>
+  <nav aria-label="工具"><button data-view="timeline"><span>◷</span>关联线索</button><button id="agent-button"><span>✳</span>Agent 协作</button><button data-view="history"><span>↶</span>恢复记录</button></nav>
+  <div class="sidebar-bottom"><div class="privacy-dot"><b></b>访问线索保存在本机</div><p>让页面回到工作上下文，<br>让思路继续往前。</p><button data-view="settings" class="settings">⚙ &nbsp; 记录与隐私</button><button id="expand" class="settings hidden">↗ &nbsp; 打开完整工作台</button></div>
+ </aside>
+ <div class="shell">
+  <header><div class="breadcrumb">我的浏览器 <span>/</span> <strong id="view-label">工作空间</strong></div><select id="mobile-nav" aria-label="切换视图"><option value="overview">统计总览</option><option value="analysis">AI 分析</option><option value="projects">常用项目</option><option value="spaces">工作空间</option><option value="timeline">关联线索</option><option value="windows">当前窗口</option><option value="duplicates">重复候选</option><option value="agent">Agent 协作</option><option value="history">恢复记录</option><option value="settings">记录与隐私</option></select><div class="header-right"><span id="mode-badge" class="badge"></span><button id="refresh" class="icon-button" title="刷新标签页" aria-label="刷新标签页">↻</button></div></header>
+  <main>
+   <div id="demo-banner" class="demo-banner hidden"><span>交互演示 · 使用示例标签页，操作不会影响你的 Chrome</span><button id="install-help">如何连接真实浏览器 ↗</button></div>
+   <section class="hero"><div><div class="eyebrow">A LITTLE LESS SCATTERED.</div><h1 id="hero-title">散落的页面，<br>接得上的思路。</h1><p id="hero-subtitle">跨过窗口的边界，把一起做的事放在一起。</p></div><div class="hero-art" aria-hidden="true"><div class="orbit o1"></div><div class="orbit o2"></div><div class="mini-tab one"><b class="mini-dot purple"></b>研究讨论 <span>×</span></div><div class="mini-tab two"><b class="mini-dot blue"></b>参考资料 <span>×</span></div><div class="mini-tab three"><b class="mini-dot green"></b>同一件事 <span>↗</span></div><div class="spark">✳</div><span class="art-note">a place for every thought</span></div></section>
+   <section id="stats" class="stats" aria-label="浏览器概况"></section>
+   <section class="workspace-toolbar"><div class="search"><span>⌕</span><input id="search" type="search" placeholder="搜索所有标签页、网址…" aria-label="搜索所有标签页"><kbd>/</kbd></div><div class="toolbar-actions"><button id="analyze" class="button primary">✳ AI 分析并更新</button><button id="preview" class="button secondary">预览整理方案 <span>↗</span></button></div></section>
+   <div class="analysis-line"><span id="analysis-status" role="status"></span><button id="cancel-analysis" class="button secondary hidden">取消分析</button></div>
+   <div id="notice" role="status" class="notice hidden"></div>
+   <div id="content"></div>
+   <footer><span>拾页 PAGEFOLD</span><span>保留你的习惯，找回工作的线索。</span></footer>
+  </main>
+ </div>
+ <dialog id="modal"><div id="modal-content"></div></dialog>
+ <div id="toast" role="status"></div>
+ <script type="module" src="app.js"></script>
+</body></html>

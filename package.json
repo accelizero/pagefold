@@ -1,0 +1,32 @@
+{
+  "name": "pagefold",
+  "version": "0.4.0",
+  "description": "Local-first Chrome workspace organizer",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:e2e": "playwright test",
+    "start": "node server.js",
+    "setup:mcp": "node bridge/install.js",
+    "bridge:status": "node bridge/cli.js status",
+    "mcp": "node bridge/mcp-server.js",
+    "package:extension": "node scripts/package-extension.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  },
+  "private": true,
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "smol-toml": "^1.8.0",
+    "zod": "^4.6.5"
+  }
+}

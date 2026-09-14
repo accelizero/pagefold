@@ -1,0 +1,60 @@
+import {test,expect,chromium} from '@playwright/test';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import http from 'node:http';
+import {installNative} from '../bridge/install.js';
+import {Client} from '@modelcontextprotocol/sdk/client/index.js';
+import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
+
+test('MCP through native host reads real page text and safely prepares/applies/restores Chrome layout',async()=>{
+ const tmp=await fs.mkdtemp('/tmp/pagefold-mcp-'),extension=path.join(tmp,'extension'),dataDir=path.join(tmp,'data'),hostName=`com.pagefold.test_${process.pid}`;
+ await fs.cp(path.resolve('extension'),extension,{recursive:true});
+ const bridgeFile=path.join(extension,'native-bridge.js');await fs.writeFile(bridgeFile,(await fs.readFile(bridgeFile,'utf8')).replace('com.pagefold.bridge',hostName));
+ const installed=await installNative({browser:'ChromeForTesting',userDataDir:path.join(tmp,'profile'),hostName,dataDir,extensionPath:extension});
+ const fixture=http.createServer((req,res)=>{res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end('<!doctype html><title>CAD research</title><main><h1>CAD evidence</h1><p>Visible floorplan research content.</p><input value="FORM_NOT_READ"><textarea>DRAFT_NOT_READ</textarea><div contenteditable="true">EDIT_NOT_READ</div><p hidden>HIDDEN_NOT_READ</p><script>/* SCRIPT_NOT_READ */</script><p>Useful conclusion.</p></main>');});
+ await new Promise(resolve=>fixture.listen(0,'127.0.0.1',resolve));const base='http://127.0.0.1:'+fixture.address().port;
+ const client=new Client({name:'pagefold-test',version:'1.0'});
+ let context;
+ try {
+  context=await chromium.launchPersistentContext(path.join(tmp,'profile'),{channel:'chromium',headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE||undefined,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
+  let worker=context.serviceWorkers()[0];if(!worker)worker=await context.waitForEvent('serviceworker');
+  const page=await context.newPage();await page.goto(`chrome-extension://${installed.extensionId}/index.html`);
+  await expect.poll(()=>page.evaluate(async()=>{const s=(await chrome.runtime.sendMessage({type:'bridgeStatus'})).data;return s.connected?'connected':JSON.stringify(s);}),{timeout:10000,message:'Native host must connect'}).toBe('connected');
+  await client.connect(new StdioClientTransport({command:process.execPath,args:[path.resolve('bridge/mcp-server.js')],env:{...process.env,PAGEFOLD_DATA_DIR:dataDir}}));
+  const tools=await client.listTools();expect(tools.tools).toHaveLength(13);
+  const call=async(name,args={})=>{const r=await client.callTool({name:'pagefold_'+name,arguments:args});if(r.isError)throw Error(r.content[0].text);return JSON.parse(r.content[0].text);};
+  const tabs=await page.evaluate(async base=>{
+   const a=await chrome.windows.create({url:base+'/alpha',focused:false});
+   const b=await chrome.windows.create({url:base+'/beta',focused:false});
+   const dup=await chrome.tabs.create({windowId:b.id,url:base+'/alpha',active:false});
+   for(const t of await chrome.tabs.query({}))if(t.url==='about:blank'&&!t.pendingUrl&&![a.tabs[0].id,b.tabs[0].id,dup.id].includes(t.id))await chrome.tabs.remove(t.id);
+   return {a:a.tabs[0].id,b:b.tabs[0].id,dup:dup.id};
+  },base);
+  await expect.poll(async()=>{try{return (await call('read_tab',{tabId:tabs.a})).text;}catch{return '';}}).toContain('CAD evidence');
+  const projects=await call('get_projects');expect(projects.projects).toHaveLength(3);
+  await call('set_projects',{projects:[...projects.projects,{id:'test',name:'测试项目',description:'用于接口验证',children:['子标签']}]});
+  expect((await call('get_projects')).projects).toHaveLength(4);
+  expect((await call('get_analysis')).trails).toBeInstanceOf(Array);
+  const status=await call('status');expect(status.connected).toBeTruthy();
+  const state=await call('get_state');expect(state.tabs).toHaveLength(3);
+  const text=await call('read_tab',{tabId:tabs.a,expectedUrl:base+'/alpha',limit:25});
+  expect(text.text).toContain('CAD evidence');expect(text.nextOffset).toBe(25);
+  const full=await call('read_tab',{tabId:tabs.a,expectedUrl:base+'/alpha'});
+  expect(full.text).toContain('Useful conclusion');expect(full.text).not.toMatch(/FORM_NOT_READ|DRAFT_NOT_READ|EDIT_NOT_READ|HIDDEN_NOT_READ|SCRIPT_NOT_READ/);
+  const forbidden=await client.callTool({name:'pagefold_read_tab',arguments:{tabId:tabs.a,expectedUrl:base+'/not-the-page'}});expect(forbidden.isError).toBeTruthy();
+  const bad=await client.callTool({name:'pagefold_prepare_plan',arguments:{snapshotId:state.snapshotId,groups:[{name:'Missing',tabIds:[tabs.a]}]}});expect(bad.isError).toBeTruthy();
+  const plan=await call('prepare_plan',{snapshotId:state.snapshotId,groups:[{name:'CAD research',tabIds:[tabs.a,tabs.b,tabs.dup],color:'blue'}],closeIds:[tabs.dup]});
+  expect(plan.applied).toBeFalsy();expect(plan.summary.closeCount).toBe(1);
+  const pre=(await call('get_state')).tabs;expect(new Set(pre.map(t=>t.windowId)).size).toBe(2);
+  const applied=await call('apply_plan',{planId:plan.planId});expect(applied.status).toBe('applied');
+  const after=await call('get_state');expect(after.tabs).toHaveLength(2);expect(new Set(after.tabs.map(t=>t.windowId)).size).toBe(1);
+  expect((await call('apply_plan',{planId:plan.planId})).alreadyApplied).toBeTruthy();
+  const recovery=await call('get_recovery');expect(recovery.id).toBe(applied.operationId);
+  const restored=await call('restore',{operationId:recovery.id});expect(restored.status).toBe('restored');
+  const final=await call('get_state');expect(final.tabs).toHaveLength(3);expect(new Set(final.tabs.map(t=>t.windowId)).size).toBe(2);
+  expect((await call('restore',{operationId:recovery.id})).alreadyRestored).toBeTruthy();
+  const stats=await fs.stat(path.join(dataDir,'bridge.sock'));expect(stats.mode&0o777).toBe(0o600);
+  await context.close();context=null;
+  await expect.poll(async()=>{const r=await client.callTool({name:'pagefold_status',arguments:{}});return r.isError;}).toBeTruthy();
+ }finally {await client.close();if(context)await context.close();await fs.rm(installed.manifestPath,{force:true});await fs.rm(tmp,{recursive:true,force:true});fixture.close();}
+});

@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "拾页 · Pagefold",
+  "version": "0.4.0",
+  "description": "按项目整理标签页，保留每次浏览的有序路径。AI 分析、自定义标签、可恢复整理。",
+  "minimum_chrome_version": "121",
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "storage",
+    "sidePanel",
+    "idle",
+    "nativeMessaging",
+    "scripting",
+    "alarms"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "打开拾页"
+  },
+  "side_panel": {
+    "default_path": "index.html?panel=1"
+  },
+  "commands": {
+    "open-dashboard": {
+      "suggested_key": {
+        "default": "Alt+Shift+P",
+        "mac": "Alt+Shift+P"
+      },
+      "description": "打开拾页工作台"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'none'"
+  },
+  "incognito": "not_allowed",
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxpIpzOdicSpN8R41ZGFbiZlQbJ0uDLUx9ixRyiVRnXNa/C73Fh4SktWr2Zj3yrThRzcJe7p5CmO1EoMM8htG6taWBRXi9vrrR8URa0Y2WcZNoA93ukkxJBU3k4a4CnyUoZfAMEazp6ot+6l1P8wPNbIvv+uBvv27eCSZmu/Cadx0RlYYKti+TgIy9D0R2OsyuIaMDklQGcXlOqVbcCF2kIwjftgbGa4+MSwBQh6aQ1r7Ifrt5N6p5i6a2HAvV5jk83+ky3zYarVNhLVZTIvZ8A7nHC2TDmSjlmOAWULRw9//1y7aQZ4jn48W670c9TmyrPMBcrwDtId7IHAQ1bzb+QIDAQAB",
+  "optional_permissions": [
+    "history"
+  ]
+}

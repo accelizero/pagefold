@@ -1,0 +1,17 @@
+node_modules/
+test-results/
+playwright-report/
+.DS_Store
+
+artifacts/private/
+
+# Local project mirror, generated deliveries, and private configuration
+sources/
+AGENTS.md
+artifacts/
+.env
+.env.*
+*.pem
+*.key
+*.log
+analysis-config.json
