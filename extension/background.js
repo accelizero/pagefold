@@ -2,6 +2,7 @@ import {manageable, pageURL, DAY, retainEvents, analysisURL} from './core.js';
 import {defaultProjects,validateProjects} from './insights.js';
 import {importHistory} from './history-import.js';
 import {closeTab,reopenTab} from './tab-actions.js';
+import {idleProtected, makeIdleRecord, restoreable} from './idle.js';
 import {applyPlan, restore} from './operations.js';
 import {bridgeStatus,connectBridge,setBridgeEnabled,startAnalysis,analysisStatus,cancelAnalysis} from './native-bridge.js';
 
@@ -61,10 +62,10 @@ async function dispatch(message) {
     if(message.type==='state') {
       await queue;
       const windows=(await chrome.windows.getAll({populate:true,windowTypes:['normal']})).filter(w=>!w.incognito);
-      const data=await chrome.storage.local.get(['events','paused','transaction','draft','projects','historyImport','analysisReports','archivedGroups','analysisSource']);
+      const data=await chrome.storage.local.get(['events','paused','transaction','draft','projects','historyImport','analysisReports','archivedGroups','analysisSource','idleTabs','idleProtectedIds','idleThresholdMs']);
       const events=(data.events||[]).filter(e=>e.ts>Date.now()-30*DAY);
       const {closedTabs=[]}=await chrome.storage.session.get('closedTabs');
-      return {...data,closedTabs:closedTabs.filter(e=>e.status==='closed'),projects:data.projects||defaultProjects,events,windows:windows.map(w=>({...w,tabs:w.tabs.filter(manageable)})),tabs:windows.flatMap(w=>w.tabs.filter(manageable)),sessionId:await serial(sessionId),busy};
+      return {...data,idleTabs:data.idleTabs||[],idleProtectedIds:data.idleProtectedIds||[],idleThresholdMs:data.idleThresholdMs||3*DAY,closedTabs:closedTabs.filter(e=>e.status==='closed'),projects:data.projects||defaultProjects,events,windows:windows.map(w=>({...w,tabs:w.tabs.filter(manageable)})),tabs:windows.flatMap(w=>w.tabs.filter(manageable)),sessionId:await serial(sessionId),busy};
     }
     if(message.type==='saveProjects') {const projects=validateProjects(message.projects);await chrome.storage.local.set({projects,projectsRevision:crypto.randomUUID()});return projects;}
     if(message.type==='importHistory') {const historyImport=await importHistory(chrome);await chrome.storage.local.set({historyImport,analysisSource:'both'});return historyImport;}
@@ -79,6 +80,25 @@ async function dispatch(message) {
     if(message.type==='clearEvents') return serial(()=>chrome.storage.local.set({events:[]}));
     if(message.type==='discardRecovery') {if(busy)throw Error('操作正在进行，请稍后再试。');return chrome.storage.local.remove('transaction');}
     if(message.type==='focus') {const t=await chrome.tabs.get(message.id);await chrome.windows.update(t.windowId,{focused:true});await chrome.tabs.update(t.id,{active:true});return;}
+    if(message.type==='idleThreshold') {const value=Number(message.value);if(!Number.isFinite(value)||value<60000||value>90*DAY)throw Error('闲置阈值无效。');await chrome.storage.local.set({idleThresholdMs:value});return value;}
+    if(message.type==='idleStore') return serial(async()=>{
+      const ids=[...new Set((message.ids||[]).filter(Number.isInteger))];
+      const windows=(await chrome.windows.getAll({populate:true,windowTypes:['normal']})).filter(w=>!w.incognito),tabs=windows.flatMap(w=>w.tabs.filter(manageable));
+      const data=await chrome.storage.local.get(['idleTabs','idleProtectedIds','draft']),protectedIds=new Set(data.idleProtectedIds||[]),selected=tabs.filter(t=>ids.includes(t.id)&&!idleProtected(t)&&!protectedIds.has(t.id));
+      if(!selected.length)throw Error('没有可收纳的闲置页面。');
+      const groups=data.draft?.plan?.groups||[],records=selected.map(t=>{const g=groups.find(g=>g.tabIds?.includes(t.id));return makeIdleRecord(t,g&&{id:g.id,name:g.name});});
+      await chrome.storage.local.set({idleTabs:[...records,...(data.idleTabs||[])].slice(0,500)});
+      for(const tab of selected)await chrome.tabs.remove(tab.id);
+      return records;
+    });
+    if(message.type==='idleRestore') return serial(async()=>{
+      const data=await chrome.storage.local.get(['idleTabs']),item=(data.idleTabs||[]).find(x=>x.id===message.id);if(!item)throw Error('找不到这个闲置页面。');
+      const tabs=(await chrome.tabs.query({windowType:'normal'})).filter(manageable);if(!restoreable(item,tabs))throw Error('该页面已在 Chrome 中打开，未重复恢复。');
+      let windowId=item.windowId;try{const w=await chrome.windows.get(windowId);if(w.type!=='normal'||w.incognito)windowId=undefined;}catch{windowId=undefined;}
+      const tab=await chrome.tabs.create({url:item.url,active:false,...(windowId?{windowId,index:Math.max(0,item.index||0)}:{})});
+      await chrome.storage.local.set({idleTabs:(data.idleTabs||[]).filter(x=>x.id!==item.id)});return {tab,record:item};
+    });
+    if(message.type==='idleClear') return serial(async()=>{const data=await chrome.storage.local.get(['idleTabs']),ids=new Set((message.ids||[]).map(String)),removed=(data.idleTabs||[]).filter(x=>ids.has(String(x.id)));await chrome.storage.local.set({idleTabs:(data.idleTabs||[]).filter(x=>!ids.has(String(x.id)))});return removed.length;});
     if(message.type==='openDashboard') return openDashboard();
     if(message.type==='panel') {const w=await chrome.windows.getCurrent();return chrome.sidePanel.open({windowId:w.id});}
     if(['closeTab','reopenTab'].includes(message.type)) {

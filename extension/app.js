@@ -3,11 +3,12 @@ import {defaultProjects} from './insights.js';
 import {timelineSessions,timelineContext,timelineTitle} from './timeline.js';
 import {propose,duplicateSets,domain,pageURL,movable,fingerprint,sessions,agentPacket,validatePlan,COLORS,reconcilePlan} from './core.js';
 import {demoState} from './demo.js';
+import {idleCandidates, IDLE_MS, IDLE_OPTIONS} from './idle.js';
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const live=!!globalThis.chrome?.runtime?.id;
-const labels={overview:'统计总览',analysis:'AI 分析',projects:'常用项目',spaces:'工作空间',timeline:'关联线索',windows:'当前窗口',duplicates:'重复候选',history:'恢复记录',settings:'设置'};
+const labels={overview:'统计总览',analysis:'AI 分析',projects:'常用项目',spaces:'工作空间',idle:'闲置页面',timeline:'关联线索',windows:'当前窗口',duplicates:'重复候选',history:'恢复记录',settings:'设置'};
 const icons=['⌑','✳','◇','◌','◈','▧'];
 let pendingClose;
 let analysis={status:'idle'};
@@ -25,6 +26,10 @@ async function api(type,data={}) {
  if(type==='clearEvents') demo.events=[];
  if(type==='discardRecovery') delete demo.transaction;
  if(type==='focus') {toast('演示：已定位到「'+(state.tabs.find(t=>t.id===data.id)?.title||'页面')+'」');return;}
+ if(type==='idleThreshold'){demo.idleThresholdMs=Number(data.value);}
+ if(type==='idleStore'){const selected=demo.tabs.filter(t=>(data.ids||[]).includes(t.id));demo.idleTabs=[...(demo.idleTabs||[]),...selected.map(t=>({...t,id:'idle-'+t.id,storedAt:Date.now()}))];demo.tabs=demo.tabs.filter(t=>!(data.ids||[]).includes(t.id));demo.windows=demo.windows.map(w=>({...w,tabs:w.tabs.filter(t=>t.id!==undefined&&!(data.ids||[]).includes(t.id))}));}
+ if(type==='idleRestore'){const item=(demo.idleTabs||[]).find(x=>x.id===data.id);if(!item)throw Error('找不到这个闲置页面。');const t={...item,id:Math.max(0,...demo.tabs.map(t=>Number(t.id)||0))+1};delete t.storedAt;demo.tabs.push(t);let w=demo.windows.find(w=>w.id===t.windowId);if(w)w.tabs.push(t);else demo.windows.push({id:t.windowId,tabs:[t]});demo.idleTabs=demo.idleTabs.filter(x=>x.id!==data.id);}
+ if(type==='idleClear'){demo.idleTabs=(demo.idleTabs||[]).filter(x=>!(data.ids||[]).includes(x.id));}
  if(type==='closeTab') {const t=demo.tabs.find(t=>t.id===data.id);if(!t||pageURL(t)!==data.expectedUrl)throw Error('页面已变化');demo.closedTabs=[...(demo.closedTabs||[]),{id:crypto.randomUUID(),tab:structuredClone(t),group:structuredClone(demo.draft?.plan?.groups.find(g=>g.tabIds.includes(t.id))||null)}].slice(-20);demo.tabs=demo.tabs.filter(t=>t.id!==data.id);demo.windows=demo.windows.map(w=>({...w,tabs:w.tabs.filter(t=>t.id!==data.id)}));}
  if(type==='reopenTab') {const entry=demo.closedTabs?.find(e=>e.id===data.id);if(!entry)throw Error('关闭记录已失效');const t={...entry.tab,id:Math.max(0,...demo.tabs.map(t=>t.id),...demo.closedTabs.map(e=>e.tab.id))+1};demo.tabs.push(t);let w=demo.windows.find(w=>w.id===t.windowId);if(w)w.tabs.push(t);else demo.windows.push({id:t.windowId,tabs:[t]});demo.closedTabs=demo.closedTabs.filter(e=>e.id!==data.id);if(demo.draft?.plan){const next=reconcilePlan(demo.draft.plan,demo.tabs);if(entry.group&&!t.pinned){next.groups.forEach(g=>g.tabIds=g.tabIds.filter(id=>id!==t.id));let g=next.groups.find(g=>g.id===entry.group.id);if(!g){g={...entry.group,tabIds:[]};next.groups.push(g);}g.tabIds.push(t.id);next.groups=next.groups.filter(g=>g.tabIds.length);}demo.draft.plan=next;}}
  if(type==='apply') {
@@ -70,12 +75,14 @@ function render() {
  $('main').classList.toggle('timeline-view',view==='timeline');
  $('main').classList.toggle('insights-view',['analysis','overview','projects'].includes(view));
  $('#stats').classList.toggle('hidden',['timeline','analysis','projects'].includes(view));
- $('.toolbar-actions').classList.toggle('hidden',view==='timeline');
- $('.analysis-line').classList.toggle('hidden',view==='timeline');
+ $('.toolbar-actions').classList.toggle('hidden',view==='timeline'||view==='idle');
+ $('.analysis-line').classList.toggle('hidden',view==='timeline'||view==='idle');
  $$('#modal button').forEach(b=>b.disabled=busy);
  $('#mode-badge').textContent=live?(state.paused?'记录已暂停':'本地记录中'):'DEMO · 可交互';
  $('#demo-banner').classList.toggle('hidden',live);
  $('#space-count').textContent=plan.groups.length;
+ const idleCount=idleCandidates(state.tabs,state.idleTabs||[],Date.now(),state.idleThresholdMs||IDLE_MS).length;
+ if($('#idle-count'))$('#idle-count').textContent=idleCount||'';
  const d=duplicateSets(state.tabs),count=d.exact.reduce((n,a)=>n+a.length-1,0);
 
  $('#view-label').textContent=labels[view];
@@ -88,7 +95,7 @@ function render() {
  $('.analysis-line').classList.toggle('hidden',!['spaces','analysis','windows','duplicates'].includes(view));
  $('#stats').classList.toggle('hidden',parent!=='spaces');
  if(parent!==view)$('#view-label').textContent=labels[parent]+' / '+labels[view];
- const heads={overview:['页面有多少，<br>思路在哪里。','看项目分布与共同访问关系。'],analysis:['同一件事，<br>每次都有来路。','AI 理解项目，同时保留每次不同的浏览路径。'],projects:['你常做的事，<br>给 AI 一点方向。','定义项目、用途和细分；允许一段活动属于多个项目。'],spaces:['散落的页面，<br>接得上的思路。','跨过窗口的边界，把一起做的事放在一起。'],timeline:['页面之间，<br>有哪些关联。','这是用于判断共同访问的原始线索，分析结果在 AI 分析页。'],windows:['所有窗口，<br>在一个地方看见。','搜索任意页面，直接回到它所在的窗口。'],duplicates:['少一些重复，<br>多一点空间。','逐项确认需要关闭的副本，整理时再统一执行。'],history:['每次整理，<br>都有一条回来的路。','恢复最近一次操作前的窗口、顺序与标签组。'],settings:['你的记录，<br>由你来掌握。','选择用于判断页面关联的线索，随时暂停或清除。']};
+ const heads={overview:['页面有多少，<br>思路在哪里。','看项目分布与共同访问关系。'],analysis:['同一件事，<br>每次都有来路。','AI 理解项目，同时保留每次不同的浏览路径。'],projects:['你常做的事，<br>给 AI 一点方向。','定义项目、用途和细分；允许一段活动属于多个项目。'],spaces:['散落的页面，<br>接得上的思路。','跨过窗口的边界，把一起做的事放在一起。'],idle:['不用现在看，<br>先放到一边。','闲置页面仍保留原来的工作空间，只是暂时离开标签栏。'],timeline:['页面之间，<br>有哪些关联。','这是用于判断共同访问的原始线索，分析结果在 AI 分析页。'],windows:['所有窗口，<br>在一个地方看见。','搜索任意页面，直接回到它所在的窗口。'],duplicates:['少一些重复，<br>多一点空间。','逐项确认需要关闭的副本，整理时再统一执行。'],history:['每次整理，<br>都有一条回来的路。','恢复最近一次操作前的窗口、顺序与标签组。'],settings:['你的记录，<br>由你来掌握。','选择用于判断页面关联的线索，随时暂停或清除。']};
  $('#hero-title').innerHTML=heads[view][0];$('#hero-subtitle').textContent=heads[view][1];
  const sessionCount=sessions(state.events).length;
  $('#stats').innerHTML=[['打开的标签页',state.tabs.length,'个页面'],['分散在',state.windows.filter(w=>w.tabs.length).length,'个窗口'],['建议工作空间',plan.groups.length,'个上下文'],['完全重复副本',count,'个待确认']].map(([label,n,unit])=>`<div class="stat"><span class="stat-label">${label}</span><span class="stat-value">${n}<small>${unit}</small></span></div>`).join('');
@@ -101,8 +108,13 @@ function render() {
  const status=$('#analysis-status');status.textContent=analysis.text||(plan.source==='agent'?'上次分析 · '+fmtDate(plan.createdAt):'点击更新分类，让模型按项目理解这些页面。');
  status.classList.toggle('error',analysis.status==='error');
  showNotice(stale?'页面已变化，请刷新工作台后继续。':state.transaction && ['failed','applying','restoring'].includes(state.transaction.status)?'上次操作未完成，原始布局已保存。请到“恢复记录”处理后再整理。':'');
- const renderers={overview:()=>renderInsights('overview',state,plan,query),analysis:()=>renderInsights('analysis',state,plan,query),projects:()=>renderInsights('projects',state,plan,query),spaces:renderSpaces,timeline:renderTimeline,windows:renderWindows,duplicates:renderDuplicates,history:renderHistory,settings:renderSettings};
+ const renderers={overview:()=>renderInsights('overview',state,plan,query),analysis:()=>renderInsights('analysis',state,plan,query),projects:()=>renderInsights('projects',state,plan,query),spaces:renderSpaces,idle:renderIdle,timeline:renderTimeline,windows:renderWindows,duplicates:renderDuplicates,history:renderHistory,settings:renderSettings};
  $('#content').innerHTML=renderers[view]();
+}
+function renderIdle(){
+ const threshold=state.idleThresholdMs||IDLE_MS,candidates=idleCandidates(state.tabs,state.idleTabs||[],Date.now(),threshold).filter(matches),stored=(state.idleTabs||[]).filter(x=>!query||`${x.title} ${x.url}`.toLowerCase().includes(query.toLowerCase()));
+ const rows=(items,storedMode=false)=>items.length?'<div class="idle-list">'+items.map(t=>{const workspaceName=t.workspaceName||t.workspace||'';return `<article class="list-card idle-row"><input type="checkbox" data-idle-select="${esc(t.id)}" aria-label="选择 ${esc(t.title)}"><div class="idle-main"><button class="tab-link" ${storedMode?'disabled':''} ${storedMode?'':'data-focus="'+esc(t.id)+'"'}><strong>${esc(t.title||'未命名标签页')}</strong><small>${esc(domain(pageURL(t)))}</small></button><p>${storedMode?'收纳于 '+fmtDate(t.storedAt):'最后访问 '+fmtDate(t.lastAccessed)+' · '+(t.idleDays||0)+' 天未使用'}${workspaceName?` · 原工作空间：${esc(workspaceName)}`:''}</p></div>${storedMode?`<button class="button secondary" data-idle-restore="${esc(t.id)}">${workspaceName?'恢复到 '+esc(workspaceName):'恢复'}</button>`:'<span class="pill">可收纳</span>'}</article>`;}).join('')+'</div>':empty(storedMode?'闲置区还是空的':'暂时没有达到闲置条件的页面',storedMode?'收纳的页面会保留在这里，可随时恢复。':'默认判断为 3 天未访问；固定页、当前页和播放页会自动保护。');
+ return `<div class="section-heading"><div><h2>闲置候选 · ${candidates.length}</h2><p>只改变可见性，不改变工作空间归属</p></div><div class="agent-actions"><label class="idle-setting">多久算闲置 <select id="idle-threshold">${IDLE_OPTIONS.map(o=>`<option value="${o.value}" ${o.value===threshold?'selected':''}>${o.label}</option>`).join('')}</select></label><button class="button secondary" id="idle-store-selected">收纳选中</button><button class="button primary" id="idle-store-all">一键收纳全部</button></div></div><div class="timeline-summary">闲置页面仍然属于原来的工作空间，只是暂时从 Chrome 标签栏移到这里。默认 3 天未访问；收纳会关闭标签页并保存网址，恢复时会重新打开页面；页面内表单、滚动位置和网页状态无法保留。</div>${rows(candidates)}<div class="section-heading"><h2>已收纳 · ${stored.length}</h2><p>可恢复或清理</p><button class="button danger" id="idle-clear-all" ${stored.length?'':'disabled'}>清理全部</button></div>${stored.length?rows(stored,true):''}`;
 }
 function tabRow(t,{editable=false,closable=true}={}) {
  const letter=domain(pageURL(t)).slice(0,1).toUpperCase();
@@ -173,6 +185,7 @@ document.addEventListener('click',async e=>{
   if(target.dataset.closeTab){const t=state.tabs.find(t=>t.id===Number(target.dataset.closeTab));if(!t)throw Error('页面已关闭，请刷新。');if(t.pinned||t.audible){pendingClose={id:t.id,expectedUrl:pageURL(t),sessionId:state.sessionId};modal('关闭这个页面？','<p>'+esc(t.title)+'</p><p>这是'+(t.pinned?'固定页面':'正在播放声音的页面')+'。关闭后可以重新打开网址，但无法恢复未保存内容。</p>','<button id="confirm-close-tab" class="button danger">关闭页面</button>');}else await actOnTab('closeTab',{id:t.id,expectedUrl:pageURL(t),sessionId:state.sessionId});return;}
   if(target.id==='confirm-close-tab'){const request=pendingClose;pendingClose=null;$('#modal').close();if(request)await actOnTab('closeTab',{...request,confirmed:true});return;}
   if(target.dataset.reopenTab){await actOnTab('reopenTab',{id:target.dataset.reopenTab});return;}
+  if(target.dataset.idleRestore){const priorPlan=structuredClone(plan),restored=await api('idleRestore',{id:target.dataset.idleRestore});await refresh();if(restored?.tab?.id){const prior=priorPlan.groups.find(g=>g.id===restored.record?.workspaceId)||(restored.record?.workspaceName&&priorPlan.groups.find(g=>g.name===restored.record.workspaceName));if(prior){let group=plan.groups.find(g=>g.id===prior.id);if(!group){group={...prior,tabIds:[],lockedIds:[]};plan.groups.push(group);}group.tabIds=[...new Set([...group.tabIds,restored.tab.id])];group.lockedIds=[...(group.lockedIds||[]),restored.tab.id];plan.fingerprint=fingerprint(state.tabs);plan.source='manual';await saveDraft(true);}}view='idle';render();toast(restored?.record?.workspaceName?'已恢复到「'+restored.record.workspaceName+'」':'页面已恢复到 Chrome');return;}
   if(target.dataset.view) {view=target.dataset.view;query='';$('#search').value='';render();}
   if(target.dataset.focus) await api('focus',{id:Number(target.dataset.focus)});
   if(target.hasAttribute('data-dismiss')) $('#modal').close();
@@ -183,6 +196,10 @@ document.addEventListener('click',async e=>{
     analysis=await api('analyzeStart');render();break;
    case 'cancel-analysis':analysis=await api('analyzeCancel');render();break;
    case 'refresh': await refresh();toast('已刷新全部窗口');break;
+   case 'idle-store-selected': {const ids=$$('[data-idle-select]:checked').map(x=>Number(x.dataset.idleSelect));if(!ids.length){toast('请先选择要收纳的页面');break;}await api('idleStore',{ids});await refresh();view='idle';render();toast('已收纳 '+ids.length+' 个页面');break;}
+   case 'idle-store-all': {const ids=idleCandidates(state.tabs,state.idleTabs||[],Date.now(),state.idleThresholdMs||IDLE_MS).map(t=>t.id);if(!ids.length){toast('没有可收纳的闲置页面');break;}await api('idleStore',{ids});await refresh();view='idle';render();toast('已收纳 '+ids.length+' 个页面');break;}
+   case 'idle-clear-all': {const ids=(state.idleTabs||[]).map(t=>t.id);if(ids.length)modal('清理全部闲置页面？','<p>将从闲置区永久移除这些页面记录，之后无法从 PageFold 恢复。</p>','<button id="confirm-idle-clear" class="button danger">清理全部</button>');break;}
+   case 'confirm-idle-clear': await api('idleClear',{ids:(state.idleTabs||[]).map(t=>t.id)});$('#modal').close();await refresh();view='idle';render();toast('闲置区已清理');break;
    case 'regenerate':
     if(plan.source==='manual'||plan.source==='agent') modal('重新生成本地建议？','<p>这会替换当前的改名、页面归属和去重选择。浏览器布局不会改变。</p>','<button id="confirm-regenerate" class="button primary">替换当前方案</button>');
     else {await refresh(true);toast('已更新本地建议');} break;
@@ -221,6 +238,7 @@ document.addEventListener('click',async e=>{
 document.addEventListener('change',e=>{
  const target=e.target;
  insightChange(target,{api,refresh,render}).catch(error);
+ if(target.id==='idle-threshold') api('idleThreshold',{value:target.value}).then(()=>refresh()).catch(error);
  if(target.id==='mobile-nav') {if(target.value==='agent'){agentDialog();updateBridgeStatus();}else{view=target.value;query='';$('#search').value='';render();}}
  if(target.dataset.rename) {const g=plan.groups.find(g=>g.id===target.dataset.rename);g.name=target.value.trim()||g.name;g.lockedIds=[...g.tabIds];target.value=g.name;plan.source='manual';}
  if(target.dataset.move) {const id=Number(target.dataset.move);plan.groups.forEach(g=>{g.tabIds=g.tabIds.filter(x=>x!==id);g.lockedIds=(g.lockedIds||[]).filter(x=>x!==id);});const dest=plan.groups.find(g=>g.id===target.value);dest.tabIds.push(id);dest.lockedIds=[...(dest.lockedIds||[]),id];plan.source='manual';render();}
@@ -239,6 +257,6 @@ if(live) {
  let timer;const dirty=()=>{if(busy)return;clearTimeout(timer);timer=setTimeout(()=>refresh().catch(error),600);};
  chrome.tabs.onCreated.addListener(dirty);chrome.tabs.onRemoved.addListener(dirty);chrome.tabs.onMoved.addListener(dirty);chrome.tabs.onAttached.addListener(dirty);
  chrome.tabs.onUpdated.addListener((id,c)=>{if(c.url||c.title||c.pinned!==undefined||c.groupId!==undefined) dirty();});
- chrome.storage.onChanged.addListener(changes=>{if(changes.analysis){analysis=changes.analysis.newValue||{status:'idle'};if(state)render();}if(changes.events||changes.paused||changes.projects||changes.historyImport||changes.analysisReports||changes.archivedGroups||changes.analysisSource||changes.closedTabs) dirty();const d=changes.draft?.newValue;if(d&&state&&!busy&&d.sessionId===state.sessionId&&d.plan.fingerprint===fingerprint(state.tabs)){plan=d.plan;stale=false;render();}});
+ chrome.storage.onChanged.addListener(changes=>{if(changes.analysis){analysis=changes.analysis.newValue||{status:'idle'};if(state)render();}if(changes.events||changes.paused||changes.projects||changes.historyImport||changes.analysisReports||changes.archivedGroups||changes.analysisSource||changes.closedTabs||changes.idleTabs||changes.idleThresholdMs) dirty();const d=changes.draft?.newValue;if(d&&state&&!busy&&d.sessionId===state.sessionId&&d.plan.fingerprint===fingerprint(state.tabs)){plan=d.plan;stale=false;render();}});
 }
 refresh().catch(e=>{showNotice('无法加载浏览器状态：'+e.message);$('#content').innerHTML=empty('暂时无法连接','请刷新工作台；如刚更新扩展，请先在扩展管理页重新加载。');});

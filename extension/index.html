@@ -6,13 +6,14 @@
   <a class="brand" href="index.html"><span class="brand-icon">◩</span><span>拾页<small>PAGEFOLD</small></span></a>
   <nav aria-label="主导航" class="primary-nav">
    <button data-view="spaces" class="active"><span>▦</span><div>工作空间<small>查找、整理打开的页面</small></div><i id="space-count"></i></button>
+   <button data-view="idle"><span>◌</span><div>闲置页面<small>收纳暂时不用的页面</small></div><i id="idle-count"></i></button>
    <button data-view="analysis"><span>✳</span><div>AI 分析<small>更新分类，找回浏览思路</small></div></button>
    <button data-view="projects"><span>◇</span><div>常用项目<small>告诉 AI 你经常做什么</small></div></button>
   </nav>
   <div class="sidebar-bottom"><div class="privacy-dot"><b></b>访问线索保存在本机</div><p>让页面回到工作上下文，<br>让思路继续往前。</p><button data-view="settings" class="settings">⚙ &nbsp; 设置</button><button id="expand" class="settings hidden">↗ &nbsp; 打开完整工作台</button></div>
  </aside>
  <div class="shell">
-  <header><div class="breadcrumb">我的浏览器 <span>/</span> <strong id="view-label">工作空间</strong></div><select id="mobile-nav" aria-label="切换视图"><option value="spaces">工作空间</option><option value="analysis">AI 分析</option><option value="projects">常用项目</option><option value="settings">设置</option></select><div class="header-right"><span id="mode-badge" class="badge"></span><button id="refresh" class="icon-button" title="刷新标签页" aria-label="刷新标签页">↻</button></div></header>
+  <header><div class="breadcrumb">我的浏览器 <span>/</span> <strong id="view-label">工作空间</strong></div><select id="mobile-nav" aria-label="切换视图"><option value="spaces">工作空间</option><option value="idle">闲置页面</option><option value="analysis">AI 分析</option><option value="projects">常用项目</option><option value="settings">设置</option></select><div class="header-right"><span id="mode-badge" class="badge"></span><button id="refresh" class="icon-button" title="刷新标签页" aria-label="刷新标签页">↻</button></div></header>
   <main>
    <div id="demo-banner" class="demo-banner hidden"><span>交互演示 · 使用示例标签页，操作不会影响你的 Chrome</span><button id="install-help">如何连接真实浏览器 ↗</button></div>
    <section class="hero"><div><div class="eyebrow">A LITTLE LESS SCATTERED.</div><h1 id="hero-title">散落的页面，<br>接得上的思路。</h1><p id="hero-subtitle">跨过窗口的边界，把一起做的事放在一起。</p></div><div class="hero-art" aria-hidden="true"><div class="orbit o1"></div><div class="orbit o2"></div><div class="mini-tab one"><b class="mini-dot purple"></b>研究讨论 <span>×</span></div><div class="mini-tab two"><b class="mini-dot blue"></b>参考资料 <span>×</span></div><div class="mini-tab three"><b class="mini-dot green"></b>同一件事 <span>↗</span></div><div class="spark">✳</div><span class="art-note">a place for every thought</span></div></section>
