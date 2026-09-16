@@ -22,7 +22,7 @@ export function extractPage({offset=0,limit=20000}) {
 
 export async function agentRequest(method,params,dispatch) {
  const p=params||{};
- if(method==='status') {const s=await dispatch({type:'state'});return {connected:true,version:'0.4.0',sessionId:s.sessionId,tabCount:s.tabs.length,recording:!s.paused,busy:s.busy};}
+ if(method==='status') {const s=await dispatch({type:'state'});return {connected:true,version:'0.4.2',sessionId:s.sessionId,tabCount:s.tabs.length,recording:!s.paused,busy:s.busy};}
  if(method==='get_state') {
   const s=await dispatch({type:'state'}),snapshotId=crypto.randomUUID();
   const old=(await chrome.storage.session.get('agentSnapshots')).agentSnapshots||{};

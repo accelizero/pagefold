@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 test('interactive preview: search, rename, move, agent validation, dedup, apply and restore',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('http://127.0.0.1:4173');await expect(page.locator('.space-card').first()).toBeVisible();
+ await page.goto('http://127.0.0.1:4173');await expect(page.locator('.space-card').first()).toBeVisible();await expect(page.locator('.primary-nav > button')).toHaveCount(3);await expect(page.locator('.sidebar')).not.toContainText('统计总览');
  await page.setViewportSize({width:1440,height:1100});await page.screenshot({path:'artifacts/pagefold-workspaces.png',fullPage:true});
  await page.getByRole('searchbox').fill('CubiCasa');await expect(page.locator('.tab-link').filter({hasText:'CubiCasa'})).toHaveCount(1);
  await page.getByRole('searchbox').fill('');
@@ -9,17 +9,17 @@ test('interactive preview: search, rename, move, agent validation, dedup, apply 
  await page.reload();await expect(page.locator('[data-rename]').first()).toHaveValue('建筑与空间研究');
  await page.getByRole('button',{name:'＋ 新空间'}).click();
  const move=page.locator('[data-move]').first();await move.selectOption({label:'新工作空间'});await expect(page.locator('[data-rename]').filter({visible:true}).last()).toHaveValue('新工作空间');
- await page.getByRole('button',{name:'重复候选',exact:false}).click();await expect(page.getByRole('heading',{name:/完全相同的网址/})).toBeVisible();
+ await page.locator('.context-more summary').click();await page.locator('.context-more [data-view=duplicates]').click();await expect(page.getByRole('heading',{name:/完全相同的网址/})).toBeVisible();
  const checkbox=page.locator('[data-close="11"]');await checkbox.check();
  await page.getByRole('button',{name:'预览整理方案'}).click();await expect(page.locator('dialog')).toContainText('关闭 1 个你选择的副本');
  await page.getByRole('button',{name:'模拟应用方案'}).click();await expect(page.locator('dialog')).not.toBeVisible();
  await expect(page.locator('.stat').first()).toContainText('21');
- await page.getByRole('button',{name:'恢复记录',exact:false}).click();await page.getByRole('button',{name:'恢复整理前的布局'}).click();await page.getByRole('button',{name:'确认恢复布局'}).click();
+ await page.locator('.context-more summary').click();await page.locator('.context-more [data-view=history]').click();await page.getByRole('button',{name:'恢复整理前的布局'}).click();await page.getByRole('button',{name:'确认恢复布局'}).click();
  await expect(page.locator('.stat').first()).toContainText('22');
- await page.getByRole('button',{name:'Agent 协作',exact:false}).click();await page.getByRole('textbox',{name:'Agent JSON 方案'}).fill('{"version":1}');await page.getByRole('button',{name:'校验并预览'}).click();await expect(page.locator('#agent-error')).toBeVisible();
+ await page.locator('.sidebar [data-view=settings]').click();await page.locator('#agent-button').click();await page.getByRole('textbox',{name:'Agent JSON 方案'}).fill('{"version":1}');await page.getByRole('button',{name:'校验并预览'}).click();await expect(page.locator('#agent-error')).toBeVisible();
  await page.getByRole('button',{name:'关闭对话框'}).click();
- await page.getByRole('button',{name:'关联线索',exact:false}).click();await expect(page.locator('.session')).toHaveCount(3);await page.screenshot({path:'artifacts/pagefold-timeline.png',fullPage:true});
- await page.getByRole('button',{name:'记录与隐私',exact:false}).click();await page.getByRole('button',{name:'暂停记录'}).click();await expect(page.getByRole('button',{name:'继续记录'})).toBeVisible();
+ await page.locator('.primary-nav [data-view=analysis]').click();await page.getByRole('button',{name:'查看关联线索',exact:true}).click();await expect(page.locator('.session')).toHaveCount(3);await page.screenshot({path:'artifacts/pagefold-timeline.png',fullPage:true});
+ await page.locator('.sidebar [data-view=settings]').click();await page.getByRole('button',{name:'暂停记录'}).click();await expect(page.getByRole('button',{name:'继续记录'})).toBeVisible();
  await page.getByRole('button',{name:'工作空间',exact:false}).first().click();await page.setViewportSize({width:390,height:844});await page.screenshot({path:'artifacts/pagefold-mobile.png',fullPage:true});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();expect(errors).toEqual([]);
  await page.getByRole('combobox',{name:'切换视图'}).selectOption('settings');await expect(page.getByRole('heading',{name:'记录共同访问的切换线索'})).toBeVisible();

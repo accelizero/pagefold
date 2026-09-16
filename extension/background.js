@@ -1,6 +1,7 @@
 import {manageable, pageURL, DAY, retainEvents, analysisURL} from './core.js';
 import {defaultProjects,validateProjects} from './insights.js';
 import {importHistory} from './history-import.js';
+import {closeTab,reopenTab} from './tab-actions.js';
 import {applyPlan, restore} from './operations.js';
 import {bridgeStatus,connectBridge,setBridgeEnabled,startAnalysis,analysisStatus,cancelAnalysis} from './native-bridge.js';
 
@@ -62,7 +63,8 @@ async function dispatch(message) {
       const windows=(await chrome.windows.getAll({populate:true,windowTypes:['normal']})).filter(w=>!w.incognito);
       const data=await chrome.storage.local.get(['events','paused','transaction','draft','projects','historyImport','analysisReports','archivedGroups','analysisSource']);
       const events=(data.events||[]).filter(e=>e.ts>Date.now()-30*DAY);
-      return {...data,projects:data.projects||defaultProjects,events,windows:windows.map(w=>({...w,tabs:w.tabs.filter(manageable)})),tabs:windows.flatMap(w=>w.tabs.filter(manageable)),sessionId:await serial(sessionId),busy};
+      const {closedTabs=[]}=await chrome.storage.session.get('closedTabs');
+      return {...data,closedTabs:closedTabs.filter(e=>e.status==='closed'),projects:data.projects||defaultProjects,events,windows:windows.map(w=>({...w,tabs:w.tabs.filter(manageable)})),tabs:windows.flatMap(w=>w.tabs.filter(manageable)),sessionId:await serial(sessionId),busy};
     }
     if(message.type==='saveProjects') {const projects=validateProjects(message.projects);await chrome.storage.local.set({projects,projectsRevision:crypto.randomUUID()});return projects;}
     if(message.type==='importHistory') {const historyImport=await importHistory(chrome);await chrome.storage.local.set({historyImport,analysisSource:'both'});return historyImport;}
@@ -79,6 +81,10 @@ async function dispatch(message) {
     if(message.type==='focus') {const t=await chrome.tabs.get(message.id);await chrome.windows.update(t.windowId,{focused:true});await chrome.tabs.update(t.id,{active:true});return;}
     if(message.type==='openDashboard') return openDashboard();
     if(message.type==='panel') {const w=await chrome.windows.getCurrent();return chrome.sidePanel.open({windowId:w.id});}
+    if(['closeTab','reopenTab'].includes(message.type)) {
+      if(busy)throw Error('正在整理或处理页面，请稍后再试。');busy=true;
+      try{await queue;const current=await sessionId();return message.type==='closeTab'?await closeTab(chrome,message,current):await reopenTab(chrome,message.id,current);}finally{busy=false;}
+    }
     if(['apply','restore'].includes(message.type)) {
       if(busy) throw Error('正在处理上一个操作。');
       busy=true;

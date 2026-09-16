@@ -50,4 +50,4 @@ try {
  if(alive){process.stderr.write('另一个 Chrome 配置已连接拾页，请先在该配置中停用 Codex 连接。\n');process.exit(1);}
  await fs.unlink(socketPath);
 }catch(error){if(error.code!=='ENOENT')throw error;}
-await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(socketPath,resolve);});ownsSocket=true;await fs.chmod(socketPath,0o600);out({type:'ready',version:'0.4.0'});
+await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(socketPath,resolve);});ownsSocket=true;await fs.chmod(socketPath,0o600);out({type:'ready',version:'0.4.2'});

@@ -40,7 +40,7 @@ export async function analysisStatus(){
 }
 export async function startAnalysis(){
  if(job)return analysisStatus();
- if(!port||!state.connected)throw Error('拾页本机服务未就绪，请到 Agent 协作检查连接。');
+ if(!port||!state.connected)throw Error('拾页本机服务未就绪，请到 设置 → 连接 Codex检查连接。');
  const current={id:crypto.randomUUID(),startedAt:Date.now()};job=current;
  try{
   const s=await handler({type:'state'});if(s.busy)throw Error('正在整理窗口，请稍后分析。');

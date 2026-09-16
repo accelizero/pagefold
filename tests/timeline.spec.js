@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 test('timeline explains chronological visits, preserves expansion and works on mobile',async({page})=>{
  await page.goto('http://127.0.0.1:4173');
- await page.getByRole('button',{name:'关联线索',exact:false}).click();
+ await page.locator('.primary-nav [data-view=analysis]').click();await page.getByRole('button',{name:'查看关联线索',exact:true}).click();
  await expect(page.getByRole('heading',{name:'你的访问顺序'})).toBeVisible();
  await expect(page.locator('.timeline-guide')).toContainText('不是停留时长');
  await expect(page.locator('.timeline-track')).toHaveCount(0);

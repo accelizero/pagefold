@@ -1,6 +1,6 @@
 {
   "name": "pagefold",
-  "version": "0.4.0",
+  "version": "0.4.2",
   "description": "Local-first Chrome workspace organizer",
   "main": "index.js",
   "directories": {
